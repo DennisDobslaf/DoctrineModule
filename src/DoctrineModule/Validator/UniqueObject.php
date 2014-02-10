@@ -96,14 +96,14 @@ class UniqueObject extends ObjectExists
     {
         $value = $this->cleanSearchValue($value);
         $match = $this->objectRepository->findOneBy($value);
-
+        
         if (!is_object($match)) {
             return true;
         }
 
         $expectedIdentifiers = $this->getExpectedIdentifiers($context);
         $foundIdentifiers    = $this->getFoundIdentifiers($match);
-
+        
         if (count(array_diff_assoc($expectedIdentifiers, $foundIdentifiers)) == 0) {
             return true;
         }
@@ -121,11 +121,13 @@ class UniqueObject extends ObjectExists
      */
     protected function getFoundIdentifiers($match)
     {
-        return $this->objectManager
+        $identifierValues = $this->objectManager
                     ->getClassMetadata($this->objectRepository->getClassName())
                     ->getIdentifierValues($match);
+        
+        return $this->replaceFieldNameByColumnName($identifierValues);
     }
-
+    
     /**
      * Gets the identifiers from the context.
      *
@@ -143,16 +145,16 @@ class UniqueObject extends ObjectExists
 
         $result = array();
         foreach ($this->getIdentifiers() as $identifierField) {
-
-            if (!isset($context[$identifierField])) {
-                throw new Exception\RuntimeException(\sprintf('Expected context to contain %s', $identifierField));
+            $columnName = $this->getColumnName($identifierField);
+            
+            if (!isset($context[$columnName])) {
+                throw new Exception\RuntimeException(\sprintf('Expected context to contain %s', $columnName));
             }
 
-            $result[$identifierField] = $context[$identifierField];
+            $result[$columnName] = $context[$columnName];
         }
         return $result;
     }
-
 
     /**
      * @return array the names of the identifiers
@@ -162,5 +164,37 @@ class UniqueObject extends ObjectExists
         return $this->objectManager
                     ->getClassMetadata($this->objectRepository->getClassName())
                     ->getIdentifierFieldNames();
+    }
+    
+    /**
+     * Get Column Name of field
+     * 
+     * @param type $fieldName
+     * @return type
+     */
+    protected function getColumnName($fieldName)
+    {
+        $fieldMappings = $this->objectManager->getClassMetadata($this->objectRepository->getClassName())->fieldMappings;
+        
+        return $fieldMappings[$fieldName]['columnName'];
+    }
+    
+    /**
+     * Replaces (build new array) all keys form field name to column name
+     * 
+     * @param array $identifierValues
+     * @return array
+     */
+    protected function replaceFieldNameByColumnName($identifierValues)
+    {
+        $identifierValuesWithColumnNames = array();
+        
+        foreach ($identifierValues as $key => $value) {
+            $columnName = $this->getColumnName($key);
+            
+            $identifierValuesWithColumnNames[$columnName] = $value;
+        }
+        
+        return $identifierValuesWithColumnNames;
     }
 }
