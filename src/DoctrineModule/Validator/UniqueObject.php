@@ -17,9 +17,10 @@
  * <http://www.doctrine-project.org>.
  */
 
-namespace DoctrineModule\Validator;
+namespace CkZfCommons\Doctrine\Validator;
 
 use Doctrine\Common\Persistence\ObjectManager;
+use DoctrineModule\Validator\ObjectExists;
 use Zend\Validator\Exception;
 
 /**
@@ -47,6 +48,12 @@ class UniqueObject extends ObjectExists
      * @var ObjectManager
      */
     protected $objectManager;
+    
+    /**
+     *
+     * @var array
+     */
+    protected $token;
 
     /***
      * Constructor
@@ -93,7 +100,7 @@ class UniqueObject extends ObjectExists
      * @return boolean
      */
     public function isValid($value, $context = null)
-    {
+    {       
         $value = $this->cleanSearchValue($value);
         $match = $this->objectRepository->findOneBy($value);
         
@@ -125,7 +132,11 @@ class UniqueObject extends ObjectExists
                     ->getClassMetadata($this->objectRepository->getClassName())
                     ->getIdentifierValues($match);
         
-        return $this->replaceFieldNameByColumnName($identifierValues);
+        if (!is_array($this->getToken())) {
+            return $identifierValues;
+        }
+        
+        return $this->replaceFieldNameWithMappedFieldName($identifierValues);
     }
     
     /**
@@ -143,15 +154,22 @@ class UniqueObject extends ObjectExists
             );
         }
 
+        $identifiers = $this->getIdentifiers();
+        
+        if (is_array($this->getToken())) {
+            $identifiers = array();
+            foreach ($this->getToken() as $field => $mappedField) {
+                $identifiers[] = $mappedField;
+            }
+        }
+        
         $result = array();
-        foreach ($this->getIdentifiers() as $identifierField) {
-            $columnName = $this->getColumnName($identifierField);
-            
-            if (!isset($context[$columnName])) {
-                throw new Exception\RuntimeException(\sprintf('Expected context to contain %s', $columnName));
+        foreach ($identifiers as $identifierField) {
+            if (!isset($context[$identifierField])) {
+                throw new Exception\RuntimeException(\sprintf('Expected context to contain %s', $identifierField));
             }
 
-            $result[$columnName] = $context[$columnName];
+            $result[$identifierField] = $context[$identifierField];
         }
         return $result;
     }
@@ -167,34 +185,40 @@ class UniqueObject extends ObjectExists
     }
     
     /**
-     * Get Column Name of field
-     * 
-     * @param type $fieldName
-     * @return type
-     */
-    protected function getColumnName($fieldName)
-    {
-        $fieldMappings = $this->objectManager->getClassMetadata($this->objectRepository->getClassName())->fieldMappings;
-        
-        return $fieldMappings[$fieldName]['columnName'];
-    }
-    
-    /**
      * Replaces (build new array) all keys form field name to column name
      * 
      * @param array $identifierValues
      * @return array
      */
-    protected function replaceFieldNameByColumnName($identifierValues)
+    protected function replaceFieldNameWithMappedFieldName($identifierValues)
     {
+        $fieldMap = $this->getToken();
         $identifierValuesWithColumnNames = array();
         
         foreach ($identifierValues as $key => $value) {
-            $columnName = $this->getColumnName($key);
-            
-            $identifierValuesWithColumnNames[$columnName] = $value;
+            $identifierValuesWithColumnNames[$fieldMap[$key]] = $value;
         }
         
         return $identifierValuesWithColumnNames;
+    }
+    
+    /**
+     * 
+     * @return array
+     */
+    public function getToken()
+    {
+        return $this->token;
+    }
+
+    /**
+     * 
+     * @param array $token
+     * @return \CkZfCommons\Doctrine\Validator\UniqueObject
+     */
+    public function setToken($token)
+    {
+        $this->token = $token;
+        return $this;
     }
 }
